@@ -1,4 +1,7 @@
-import tkinter as tk
+import sys
+from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QGridLayout)
+from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QKeyEvent
 from geometry_msgs.msg import Twist
 import rclpy
 from rclpy.node import Node
@@ -12,34 +15,57 @@ class RobotControl(Node):
         self.current_velocity = Twist()
 
         # Initialize GUI
-        self.root = tk.Tk()
-        self.root.title("Robot Control")
+        self.app = QApplication(sys.argv)
+        self.window = QWidget()
+        self.window.setWindowTitle("Robot Control")
+
+        # Create layout
+        self.layout = QVBoxLayout()
 
         # Odometry display
-        self.odom_label = tk.Label(self.root, text="Odometry: ")
-        self.odom_label.pack()
+        self.odom_label = QLabel("Odometry: x=0, y=0")
+        self.layout.addWidget(self.odom_label)
 
         # Velocity display
-        self.vel_label = tk.Label(self.root, text="Velocity: ")
-        self.vel_label.pack()
+        self.vel_label = QLabel("Velocity: linear=0, angular=0")
+        self.layout.addWidget(self.vel_label)
 
-        # Buttons for control
-        self.forward_btn = tk.Button(self.root, text="Move Forward", command=self.move_forward)
-        self.forward_btn.pack()
+        # Control buttons layout (WASD style)
+        button_layout = QGridLayout()
 
-        self.backward_btn = tk.Button(self.root, text="Move Backward", command=self.move_backward)
-        self.backward_btn.pack()
+        self.forward_btn = QPushButton("W")
+        self.forward_btn.clicked.connect(self.move_forward)
+        button_layout.addWidget(self.forward_btn, 0, 1)
 
-        self.left_btn = tk.Button(self.root, text="Turn Left", command=self.turn_left)
-        self.left_btn.pack()
+        self.left_btn = QPushButton("A")
+        self.left_btn.clicked.connect(self.turn_left)
+        button_layout.addWidget(self.left_btn, 1, 0)
 
-        self.right_btn = tk.Button(self.root, text="Turn Right", command=self.turn_right)
-        self.right_btn.pack()
+        self.stop_btn = QPushButton("S")
+        self.stop_btn.clicked.connect(self.stop_robot)
+        button_layout.addWidget(self.stop_btn, 1, 1)
 
-        self.stop_btn = tk.Button(self.root, text="Stop", command=self.stop_robot)
-        self.stop_btn.pack()
+        self.right_btn = QPushButton("D")
+        self.right_btn.clicked.connect(self.turn_right)
+        button_layout.addWidget(self.right_btn, 1, 2)
 
-        self.update_gui()
+        self.backward_btn = QPushButton("X")
+        self.backward_btn.clicked.connect(self.move_backward)
+        button_layout.addWidget(self.backward_btn, 2, 1)
+
+        self.layout.addLayout(button_layout)
+
+        # Set layout and window size
+        self.window.setLayout(self.layout)
+        self.window.resize(400, 200)
+
+        # Start the GUI update timer
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_gui)
+        self.timer.start(100)  # Update every 100ms
+
+        # Enable keyboard focus
+        self.window.setFocusPolicy(self.window.focusPolicy().StrongFocus)
 
     def move_forward(self):
         self.current_velocity.linear.x = 0.2
@@ -58,21 +84,35 @@ class RobotControl(Node):
         self.publisher.publish(self.current_velocity)
 
     def stop_robot(self):
-        self.current_velocity = Twist()  
+        self.current_velocity = Twist()  # Reset the velocity
         self.publisher.publish(self.current_velocity)
 
     def update_odometry(self, msg):
         position = msg.pose.pose.position
         velocity = msg.twist.twist
-        self.odom_label.config(text=f"Odometry: x={position.x}, y={position.y}")
-        self.vel_label.config(text=f"Velocity: linear={velocity.linear.x}, angular={velocity.angular.z}")
+        self.odom_label.setText(f"Odometry: x={position.x:.2f}, y={position.y:.2f}")
+        self.vel_label.setText(f"Velocity: linear={velocity.linear.x:.2f}, angular={velocity.angular.z:.2f}")
 
     def update_gui(self):
-        self.root.update()
-        self.root.after(100, self.update_gui)  
+        # This function will be called every 100ms
+        pass
+
+    # Override the key press event to allow keyboard control
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_W:
+            self.move_forward()
+        elif event.key() == Qt.Key.Key_S:
+            self.stop_robot()
+        elif event.key() == Qt.Key.Key_A:
+            self.turn_left()
+        elif event.key() == Qt.Key.Key_D:
+            self.turn_right()
+        elif event.key() == Qt.Key.Key_X:
+            self.move_backward()
 
     def run(self):
-        self.root.mainloop()
+        self.window.show()
+        sys.exit(self.app.exec())
 
 def main(args=None):
     rclpy.init(args=args)
